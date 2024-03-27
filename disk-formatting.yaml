@@ -1,0 +1,38 @@
+- name: Partition and format block devices
+  hosts: "{{ hosts }}"
+  remote_user: "{{ user }}"
+  become: yes
+  become_method: sudo
+  gather_facts: yes
+  vars_files:
+    - external_variables.yaml
+  vars:
+    ansible_ssh_private_key_file: "{{ ssh_key_file }}"
+  
+  tasks:
+
+    - name: Partition block devices for each host
+      community.general.parted:
+        device: "/dev/xvd{{ item }}"
+        state: present
+        part_type: primary
+        number: 1 
+        align: none
+        label: gpt
+      loop: "{{ hostvars[inventory_hostname]['block_devices'] | split(',') }}"
+
+    - name: Format partition with xfs filesystem
+      community.general.filesystem:
+        fstype: xfs
+        dev: "/dev/xvd{{ item }}1"
+      loop: "{{ hostvars[inventory_hostname]['block_devices'] | split(',') }}"
+
+    - name: Mount partitions to /mnt/data
+      ansible.posix.mount:
+        path: "/mnt/data/disk-xvd{{ item }}1"
+        src: "/dev/xvd{{ item }}1"
+        fstype: xfs
+        state: mounted
+        opts: defaults
+      loop: "{{ hostvars[inventory_hostname]['block_devices'] | split(',') }}"
+  
